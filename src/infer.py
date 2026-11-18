@@ -1,83 +1,100 @@
-﻿import os
+"""Run a trained Tintoryx generator on an arbitrary grayscale image."""
+
+import argparse
+import os
+
+import numpy as np
 import torch
-import matplotlib.pyplot as plt
+from PIL import Image, ImageOps
 
 from config import CFG
-from src.data import make_loaders
 from src.models import UNetGenerator
 
-@torch.no_grad()
-def main():
-    device = CFG.device
 
-    path = os.path.join(
-        CFG.checkpoint_dir,
-        "tintoryx_cgan_generator.pt"
-    )
-
-    if not os.path.exists(path):
+def load_generator(checkpoint_path: str, device: torch.device):
+    if not os.path.isfile(checkpoint_path):
         raise FileNotFoundError(
-            "Train the original CGAN first using: "
-            "python -m src.train --model cgan"
+            f"Checkpoint not found: {checkpoint_path}. "
+            "Train the CGAN first with: python -m src.train --model cgan"
         )
 
     model = UNetGenerator().to(device)
-
     checkpoint = torch.load(
-        path,
-        map_location=device,
-        weights_only=False
+        checkpoint_path, map_location=device, weights_only=True
     )
-
     model.load_state_dict(checkpoint["model"])
     model.eval()
+    return model
 
-    _, loader = make_loaders(CFG)
-    gray, rgb = next(iter(loader))
 
-    gray = gray.to(device)
-    rgb = rgb.to(device)
+@torch.inference_mode()
+def colorize_image(
+    input_path: str,
+    output_path: str,
+    checkpoint_path: str,
+    device: torch.device,
+) -> str:
+    """Colorize an image through the 32x32 model and resize the result back.
 
-    prediction = model(gray)
+    The resize step preserves the uploaded image dimensions, but it does not
+    add high-resolution restoration detail.
+    """
+    model = load_generator(checkpoint_path, device)
 
-    n = min(8, len(gray))
-    fig, axes = plt.subplots(n, 3, figsize=(10, 3*n))
+    with Image.open(input_path) as source:
+        grayscale = ImageOps.exif_transpose(source).convert("L")
 
-    if n == 1:
-        axes = axes[None, :]
+    original_size = grayscale.size
+    model_input = grayscale.resize(
+        (CFG.image_size, CFG.image_size), Image.Resampling.BILINEAR
+    )
+    image_array = np.asarray(model_input, dtype=np.float32) / 255.0
+    tensor = torch.from_numpy(image_array).unsqueeze(0).unsqueeze(0).to(device)
 
-    titles = ["Grayscale", "Tintoryx Prediction", "Original RGB"]
+    prediction = model(tensor).squeeze(0).clamp(0, 1)
+    rgb_array = (
+        prediction.permute(1, 2, 0).cpu().numpy() * 255.0
+    ).round().astype(np.uint8)
+    colorized = Image.fromarray(rgb_array, mode="RGB")
+    colorized = colorized.resize(original_size, Image.Resampling.BICUBIC)
 
-    for j, title in enumerate(titles):
-        axes[0, j].set_title(title)
+    output_directory = os.path.dirname(output_path)
+    if output_directory:
+        os.makedirs(output_directory, exist_ok=True)
+    colorized.save(output_path)
+    return output_path
 
-    for i in range(n):
-        axes[i, 0].imshow(gray[i, 0].cpu(), cmap="gray")
-        axes[i, 1].imshow(
-            prediction[i].cpu().permute(1, 2, 0).clamp(0, 1)
-        )
-        axes[i, 2].imshow(rgb[i].cpu().permute(1, 2, 0))
 
-        for j in range(3):
-            axes[i, j].axis("off")
+def main():
+    parser = argparse.ArgumentParser(
+        description="Colorize a grayscale image with the Tintoryx CGAN."
+    )
+    parser.add_argument(
+        "--input", required=True, help="Path to a grayscale image."
+    )
+    parser.add_argument(
+        "--output",
+        default="outputs/colorized_image.png",
+        help="Where to save the colorized image.",
+    )
+    parser.add_argument(
+        "--checkpoint",
+        default=os.path.join(
+            CFG.checkpoint_dir, "tintoryx_cgan_generator.pt"
+        ),
+        help="Path to a trained CGAN generator checkpoint.",
+    )
+    args = parser.parse_args()
 
-    os.makedirs(CFG.output_dir, exist_ok=True)
-
-    output = os.path.join(
-        CFG.output_dir,
-        "tintoryx_trained_predictions.png"
+    saved_path = colorize_image(
+        args.input, args.output, args.checkpoint, CFG.device
+    )
+    print(f"Colorized image saved to: {saved_path}")
+    print(
+        "Note: the model operates at 32x32 resolution; the saved image is "
+        "resized to the input dimensions for convenience."
     )
 
-    plt.tight_layout()
-    plt.savefig(output, dpi=200)
-    plt.close()
-
-    mse = ((prediction-rgb)**2).mean(dim=(1,2,3))
-    psnr = (10*torch.log10(1/mse.clamp_min(1e-10))).mean()
-
-    print("Mean PSNR:", round(psnr.item(), 3), "dB")
-    print("Saved:", output)
 
 if __name__ == "__main__":
     main()
-

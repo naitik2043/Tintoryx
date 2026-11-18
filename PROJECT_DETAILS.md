@@ -1,53 +1,73 @@
-# Tintoryx - MSE2 Examination Project Notes
+# Tintoryx — Project and Experiment Notes
 
 ## Project identity
 
 - **Name:** Tintoryx
 - **Full title:** Tintoryx: Paired Conditional GAN for CIFAR-10 Image Colorization
-- **Course reference:** MSE2-DLT-050 - Historical Photo Restoration (Paired Conditional GAN)
-- **Implementation scope:** paired grayscale-to-RGB colorization on 32 x 32 CIFAR-10 images
+- **Course reference:** MSE2-DLT-050 — Historical Photo Restoration (Paired Conditional GAN)
+- **Implemented scope:** paired grayscale-to-RGB colorization on 32 × 32 CIFAR-10 images
 
-## Assignment requirements
+## 1. Problem statement
+
+A grayscale image contains intensity information but does not explicitly contain the original colors. Tintoryx learns a mapping from grayscale images to plausible RGB predictions using paired examples.
+
+The task is ambiguous: multiple color images can correspond to a similar grayscale image. The model therefore learns color patterns from the training dataset rather than recovering uniquely known colors.
+
+**Scope clarification:** although the assignment heading mentions historical-photo restoration, the actual implementation uses CIFAR-10 at 32 × 32 pixels. The project demonstrates small-image colorization and is not a validated high-resolution photo-restoration tool.
+
+## 2. Assignment and implementation specification
 
 | Item | Specification |
 |---|---|
-| Task | Colorization of grayscale images using paired conditional GAN |
+| Task | Grayscale-to-RGB image colorization |
 | Dataset | CIFAR-10 |
 | Training subset | 10,000 images |
 | Test subset | 1,000 images |
-| Input | 1-channel grayscale, 32 x 32 |
-| Target/output | 3-channel RGB, 32 x 32 |
+| Input | 1-channel grayscale, 32 × 32 |
+| Target/output | 3-channel RGB, 32 × 32 |
 | Generator | Lightweight U-Net |
 | Discriminator | Conditional PatchGAN |
-| CGAN generator loss | Adversarial loss + 10 x L1 loss |
-| Baseline | U-Net with L1 loss only |
+| Baseline objective | L1 reconstruction loss |
+| cGAN generator objective | Adversarial loss + 10 × L1 loss |
 | Training | 12 epochs per model |
-| Evaluation | Average test PSNR |
-| Visual result | Grayscale / L1 output / CGAN output / ground-truth RGB |
+| Evaluation | PSNR and SSIM |
+| Visualization | Grayscale / baseline / cGAN / original RGB |
 
-## Implemented pipeline
+## 3. Implemented pipeline
 
-1. Load CIFAR-10 RGB images using Torchvision.
-2. Select deterministic training and test subsets using seed 42.
-3. Convert each RGB image to a paired 1-channel grayscale input.
-4. Train the U-Net baseline with L1 reconstruction loss.
-5. Train the U-Net generator and conditional PatchGAN discriminator.
-6. Evaluate both generators on the same 1,000-image test subset.
-7. Save a PSNR comparison chart and visual prediction grids.
+1. Load CIFAR-10 RGB samples using Torchvision.
+2. Select deterministic train and test subsets using seed 42.
+3. Convert each RGB sample into a paired one-channel grayscale input.
+4. Train a U-Net baseline using L1 reconstruction loss.
+5. Train a U-Net generator and conditional PatchGAN discriminator.
+6. Record epoch-level training losses and save a training-history plot.
+7. Evaluate both generators on the same held-out test subset.
+8. Calculate average per-image PSNR and SSIM.
+9. Save metric results as JSON and comparison charts.
+10. Provide command-line and Streamlit inference on uploaded images, with the current 32 × 32 model input limitation.
 
-## Model objectives
+## 4. Model objectives
 
-**Baseline**
+### U-Net baseline
 
-`L_baseline = L1(prediction, target)`
+```text
+L_baseline = L1(prediction, target)
+```
 
-**Conditional GAN generator**
+L1 loss is the mean absolute difference between predicted and target pixel values. It encourages the prediction to remain close to the paired RGB target.
 
-`L_G = L_adversarial + 10 x L1(prediction, target)`
+### Conditional GAN
 
-The discriminator is trained to classify real grayscale/RGB pairs as real and generated grayscale/RGB pairs as fake.
+```text
+L_G = L_adversarial + 10 × L1(prediction, target)
+```
 
-## Training configuration used
+- The generator tries to create a convincing colorized image while staying close to the paired target.
+- The discriminator receives a grayscale image concatenated with either a real RGB target or generated RGB output.
+- The PatchGAN discriminator predicts local real/fake logits.
+- The discriminator uses binary cross-entropy with logits.
+
+## 5. Training configuration
 
 | Parameter | Value |
 |---|---:|
@@ -58,56 +78,110 @@ The discriminator is trained to classify real grayscale/RGB pairs as real and ge
 | Beta 1 | 0.5 |
 | L1 weight | 10 |
 | Seed | 42 |
-| GPU | NVIDIA GeForce RTX 2050 |
+| Image size | 32 × 32 |
+| GPU in documented run | NVIDIA GeForce RTX 2050 |
 
-Environment used for the reported run: Python 3.12.10, PyTorch 2.14.1+cu130, Torchvision 0.29.1+cu130, CUDA available.
+The training script seeds Python, NumPy, PyTorch, CUDA, and DataLoader shuffling. Exact determinism can still vary with hardware and numerical libraries.
 
-## Measured results
+## 6. Previously recorded PSNR results
 
-Both trained models were evaluated on the 1,000-image test subset.
+The repository's documented experiment reports:
 
 | Model | Average test PSNR |
 |---|---:|
 | L1-only U-Net | **24.201 dB** |
 | Conditional GAN | 22.606 dB |
-| CGAN - baseline | -1.595 dB |
+| CGAN − baseline | **−1.595 dB** |
 
-The L1-only baseline achieved the higher PSNR, indicating lower pixel-wise reconstruction error. The CGAN generated more vivid colors in some examples, but its colors were not always closer to the ground truth. PSNR does not fully capture perceptual quality.
+The L1-only U-Net achieved the higher PSNR on this test subset, indicating lower pixel-wise reconstruction error. The cGAN produced more vivid colors in some examples, but its predictions were not always closer to the ground-truth pixels.
 
-## Output artifacts
+### Metric additions
 
-- `outputs/dataset_pair_preview.png` - paired grayscale and RGB samples.
-- `outputs/tintoryx_restoration_strip.png` - four-column model comparison.
-- `outputs/tintoryx_trained_predictions.png` - CGAN inference samples.
-- `outputs/psnr_comparison.png` - measured average test PSNR comparison.
+The updated evaluation pipeline also calculates SSIM. Updated SSIM values are generated when the training and evaluation scripts are run with the local checkpoints. They are written to `outputs/evaluation_results.json`; no unmeasured SSIM result is reported here.
 
-## Recommended presentation order
+## 7. Evaluation metric definitions
 
-1. Problem and motivation
-2. Dataset and paired preprocessing
-3. U-Net generator and PatchGAN discriminator
-4. Training objectives: baseline versus CGAN
-5. Experimental setup
-6. Four-column visual comparison
-7. PSNR comparison and interpretation
-8. Limitations and future work
+### PSNR
 
-## Viva talking points
+```text
+MSE  = mean((prediction - target) ** 2)
+PSNR = 10 × log10(1 / MSE)
+```
 
-1. **Why paired data?** Each grayscale input has its corresponding RGB target, enabling supervised reconstruction.
-2. **Why U-Net?** Its encoder-decoder structure learns features while skip connections preserve spatial information.
-3. **Why a discriminator?** It encourages generated local color and texture patterns to resemble real image pairs.
-4. **Why L1?** It penalizes absolute pixel differences and anchors predictions to their paired target.
-5. **Why combine adversarial and L1 losses?** Adversarial loss encourages realism; L1 encourages fidelity to the target.
-6. **Why use PSNR and visual comparisons?** PSNR provides a numeric pixel-error measure, while visual inspection reveals color differences and artifacts.
+PSNR is calculated per image for pixel values in [0, 1], then averaged over the test subset. Higher PSNR indicates lower pixel-wise reconstruction error. The implementation clamps zero MSE to a small positive value, so identical images return a finite 100 dB.
 
-## Limitations and scope clarification
+### SSIM
 
-The assignment heading mentions historical photo restoration, but the specified implementation dataset is CIFAR-10 at 32 x 32 resolution. This project is therefore a small-image colorization demonstration, not a validated high-resolution archival-photo restoration system. A higher-resolution historical-photo dataset and additional restoration methods would be required to support that broader claim.
+SSIM compares local luminance, contrast, and structure. Tintoryx uses a Gaussian window and a data range of 1.0. The implementation calculates an SSIM score for each image and averages the scores across the batch and test subset.
 
-## Future work
+SSIM complements PSNR, but neither metric completely describes perceptual color realism.
 
-- Larger paired datasets and higher-resolution generators.
-- Perceptual losses and additional image-quality metrics.
-- Per-epoch training history and learning curves.
-- A user-facing interface for arbitrary grayscale image inference.
+## 8. Output artifacts
+
+| Artifact | Description |
+|---|---|
+| `outputs/dataset_pair_preview.png` | Paired grayscale and RGB samples |
+| `outputs/tintoryx_restoration_strip.png` | Four-column model comparison |
+| `outputs/tintoryx_trained_predictions.png` | cGAN predictions |
+| `outputs/training_history.json` | Epoch-level training losses and config |
+| `outputs/training_history.png` | Baseline and cGAN loss curves |
+| `outputs/evaluation_results.json` | PSNR, SSIM, sample counts, metric deltas |
+| `outputs/metrics_comparison.png` | PSNR and SSIM comparison chart |
+
+Generated histories and evaluation outputs are local experiment artifacts and are excluded from Git tracking.
+
+## 9. Important source files
+
+| File | Responsibility |
+|---|---|
+| `config.py` | Training configuration and compute device |
+| `src/data.py` | CIFAR-10 loading and paired grayscale conversion |
+| `src/models.py` | U-Net generator and PatchGAN discriminator |
+| `src/train.py` | Baseline and cGAN training loops |
+| `src/training_artifacts.py` | Training-history JSON and loss plot |
+| `src/metrics.py` | PSNR and SSIM calculations |
+| `src/evaluate.py` | Held-out metric evaluation and charts |
+| `src/visualize.py` | Side-by-side model output visualization |
+| `src/infer.py` | Command-line image inference |
+| `app.py` | Streamlit upload and colorization interface |
+| `tests/test_models.py` | Architecture and metric unit tests |
+
+## 10. Viva talking points
+
+1. **Why paired data?** Each grayscale image is generated from a known RGB image, so the model can learn from its matching target.
+2. **Why U-Net?** The encoder-decoder learns image features, while skip connections help retain spatial information.
+3. **Why L1 loss?** It penalizes absolute pixel differences and anchors the output to the paired RGB target.
+4. **Why a discriminator?** It encourages generated image patches to resemble patches from real RGB targets.
+5. **Why Conditional GAN?** The discriminator receives the grayscale condition along with the candidate RGB image, so it judges whether the colorized result is plausible for that input.
+6. **Why use both PSNR and SSIM?** PSNR measures pixel error; SSIM compares local structural similarity. They provide complementary evidence.
+7. **Why did the baseline achieve higher PSNR?** The adversarial objective can favor realistic-looking local patterns rather than exact pixel matching. In this recorded run, that trade-off resulted in lower PSNR for the cGAN.
+8. **Does the app restore high-resolution photographs?** No. The current model was trained at 32 × 32 on CIFAR-10. The interface resizes uploaded images for a demonstration only.
+
+## 11. Limitations
+
+- CIFAR-10 images are small and contain limited object categories.
+- Grayscale-to-color prediction is inherently ambiguous.
+- The training subset and epoch count are limited.
+- PSNR and SSIM do not fully capture perceptual color quality.
+- Arbitrary-image inference downsamples the input to 32 × 32, then resizes the generated result to the original dimensions.
+- The model is not a production-ready historical-photo restoration system.
+
+## 12. Future work
+
+- Train on larger paired datasets and higher-resolution images.
+- Add perceptual and color-consistency losses.
+- Add per-epoch validation and automatic best-checkpoint selection.
+- Compare multiple random seeds and report mean and standard deviation.
+- Evaluate with additional perceptual metrics and human assessment.
+- Train a dedicated high-resolution model before claiming archival-restoration capability.
+
+## 13. Reproduction commands
+
+```bash
+python -m src.prepare_data
+python -m src.train --model both
+python -m src.evaluate
+python -m src.visualize
+python -m unittest discover -s tests -v
+streamlit run app.py
+```

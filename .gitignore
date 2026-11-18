@@ -22,14 +22,19 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Downloaded dataset
+# Downloaded dataset and generated model checkpoints
 data/
-
-# Model checkpoints (large generated binaries)
 checkpoints/
 *.pt
 *.pth
 *.ckpt
+
+# Generated experiment artifacts (re-created by training/evaluation)
+outputs/training_history.json
+outputs/training_history.png
+outputs/evaluation_results.json
+outputs/metrics_comparison.png
+outputs/colorized_image.png
 
 # Logs and temporary files
 *.log

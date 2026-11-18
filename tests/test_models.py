@@ -2,7 +2,7 @@ import unittest
 
 import torch
 
-from src.metrics import batch_psnr
+from src.metrics import batch_psnr, batch_ssim
 from src.models import PatchDiscriminator, UNetGenerator
 
 
@@ -37,7 +37,6 @@ class TintoryxModelTests(unittest.TestCase):
     def test_perfect_prediction_has_maximum_clamped_psnr(self):
         image = torch.rand(2, 3, 32, 32)
         score = batch_psnr(image, image)
-
         self.assertAlmostEqual(score, 100.0, places=4)
 
     def test_larger_error_has_lower_psnr(self):
@@ -49,6 +48,29 @@ class TintoryxModelTests(unittest.TestCase):
             batch_psnr(small_error, target),
             batch_psnr(large_error, target),
         )
+
+    def test_identical_images_have_ssim_near_one(self):
+        image = torch.rand(2, 3, 32, 32)
+        self.assertGreater(batch_ssim(image, image), 0.999)
+
+    def test_more_distortion_has_lower_ssim(self):
+        target = torch.full((2, 3, 32, 32), 0.5)
+        small_error = target + 0.05
+        large_error = target + 0.3
+
+        self.assertGreater(
+            batch_ssim(small_error, target),
+            batch_ssim(large_error, target),
+        )
+
+    def test_metrics_reject_mismatched_shapes(self):
+        prediction = torch.rand(2, 3, 32, 32)
+        target = torch.rand(2, 1, 32, 32)
+
+        with self.assertRaises(ValueError):
+            batch_psnr(prediction, target)
+        with self.assertRaises(ValueError):
+            batch_ssim(prediction, target)
 
 
 if __name__ == "__main__":
