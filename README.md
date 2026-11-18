@@ -1,110 +1,240 @@
-﻿# Tintoryx
-### Paired Conditional GAN for CIFAR-10 Image Colorization
+# Tintoryx
 
-**Tintoryx** is a compact deep-learning project that learns to convert 32Ã—32 grayscale CIFAR-10 images into RGB images. It compares a U-Net trained only with pixel-wise L1 loss against a conditional GAN whose generator uses adversarial loss plus weighted L1 reconstruction loss.
+### CIFAR-10 Grayscale-to-RGB Colorization with U-Net and Conditional GANs
 
-> Scope follows the MSE2-DLT-050 brief: 10,000 training images, 1,000 test images, grayscale input, 32Ã—32 RGB target, 12 epochs, a four-column visual comparison, and average test PSNR.
+[![CI](https://github.com/naitik2043/Tintoryx/actions/workflows/ci.yml/badge.svg)](https://github.com/naitik2043/Tintoryx/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.12-blue)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-## 1. Problem statement
-Colorizing a grayscale image is an ill-posed problem: one gray value can correspond to many possible colors. A regression model trained with L1 loss often predicts average colors and may look dull. A conditional GAN adds a discriminator that encourages generated colors and local image patterns to look more realistic while the L1 term keeps the output connected to the correct paired target.
+**Tintoryx** is an academic deep-learning project that learns to convert paired 32 x 32 grayscale CIFAR-10 images into RGB images. It compares a U-Net trained with pixel-wise L1 loss against a Conditional Generative Adversarial Network (cGAN) that combines adversarial loss with weighted L1 reconstruction loss.
 
-## 2. Models
-- **Baseline:** U-Net generator trained with `L1(predicted_RGB, target_RGB)`.
-- **Tintoryx CGAN:** same U-Net generator plus a PatchGAN discriminator. The discriminator receives the concatenation of grayscale input (1 channel) and either real or generated RGB (3 channels).
-- **Generator objective:** `L_G = L_adversarial + 10 Ã— L1`.
-- **Discriminator objective:** binary cross-entropy on real pairs (label 1) and generated pairs (label 0).
+> **Scope note:** The assignment brief is titled "Historical Photo Restoration", but its specified dataset is CIFAR-10 at 32 x 32 pixels. This repository therefore demonstrates small-image colorization; it is not a validated high-resolution historical-photo restoration system.
 
-## 3. Pipeline
-```text
-CIFAR-10 RGB image (3Ã—32Ã—32)
-          |
-          +-------------------------------> Ground-truth RGB target
-          |
-     RGB-to-grayscale
-          |
-   Grayscale input (1Ã—32Ã—32)
-          |
-     U-Net Generator
-          |
-   Predicted RGB (3Ã—32Ã—32)
-          |
-   +------+----------------+
-   |                       |
-L1-only baseline       Conditional GAN
-   |                 + PatchGAN Discriminator
-   |                       |
-L1 loss              Adversarial + 10 Ã— L1
-   |                       |
-   +-----------+-----------+
-               |
-        Test PSNR + visual strip
-```
+## Results at a glance
 
-## 4. Project structure
+Both models were trained for 12 epochs on 10,000 CIFAR-10 training images and evaluated on the same 1,000-image test subset.
+
+| Model | Average test PSNR |
+| --- | ---: |
+| L1-only U-Net baseline | **24.201 dB** |
+| Conditional GAN | 22.606 dB |
+| CGAN minus baseline | **-1.595 dB** |
+
+The L1-only baseline achieved the higher PSNR, which indicates lower pixel-wise reconstruction error on this test subset. The CGAN produced more vivid colors in some examples, but also showed color differences and artifacts. PSNR measures pixel-level similarity and does not fully describe perceptual quality.
+
+### Visual results
+
+**Paired dataset examples**
+
+![Grayscale and RGB dataset pairs](outputs/dataset_pair_preview.png)
+
+**Four-column model comparison**
+
+![Grayscale input, L1 baseline, CGAN output, and ground-truth RGB](outputs/tintoryx_restoration_strip.png)
+
+**Trained CGAN predictions**
+
+![Trained CGAN predictions](outputs/tintoryx_trained_predictions.png)
+
+**Average test PSNR**
+
+![PSNR comparison chart](outputs/psnr_comparison.png)
+
+## Architecture
+
+![Tintoryx training and evaluation architecture](docs/architecture.svg)
+
+### Models
+
+- **U-Net generator:** maps a 1-channel grayscale image of shape `1 x 32 x 32` to a 3-channel RGB prediction of shape `3 x 32 x 32`.
+- **PatchGAN discriminator:** receives the concatenation of a grayscale image and a candidate RGB image (4 channels) and predicts local real/fake logits.
+- **Baseline objective:** `L_baseline = L1(prediction, target)`.
+- **CGAN generator objective:** `L_G = L_adversarial + 10 x L1`.
+- **Discriminator objective:** binary cross-entropy for real grayscale/RGB pairs and generated grayscale/RGB pairs.
+
+## Dataset and preprocessing
+
+Tintoryx uses the CIFAR-10 dataset through `torchvision.datasets.CIFAR10`.
+
+| Split | Samples used |
+| --- | ---: |
+| Training subset | 10,000 |
+| Test subset | 1,000 |
+| Image size | 32 x 32 |
+| Input | 1-channel grayscale |
+| Target | 3-channel RGB |
+
+Each grayscale input is derived from its corresponding RGB image, preserving the paired relationship required for supervised training. The selected train and test subsets are determined using seed 42.
+
+The CIFAR-10 dataset is downloaded locally on first run and is intentionally excluded from Git tracking.
+
+## Training configuration
+
+| Parameter | Value |
+| --- | ---: |
+| Epochs per model | 12 |
+| Batch size | 16 |
+| Optimizer | Adam |
+| Learning rate | 0.0002 |
+| Adam beta 1 | 0.5 |
+| CGAN L1 weight | 10 |
+| Random seed | 42 |
+| Tested GPU | NVIDIA GeForce RTX 2050 |
+
+The reported experiment was run with Python 3.12, PyTorch 2.14.1+cu130, Torchvision 0.29.1+cu130, and CUDA available. Results may vary with hardware, software versions, and training conditions.
+
+## Project structure
+
 ```text
 Tintoryx/
-â”œâ”€â”€ config.py
-â”œâ”€â”€ requirements.txt
-â”œâ”€â”€ src/
-â”‚   â”œâ”€â”€ data.py
-â”‚   â”œâ”€â”€ models.py
-â”‚   â”œâ”€â”€ train.py
-â”‚   â”œâ”€â”€ evaluate.py
-â”‚   â”œâ”€â”€ metrics.py
-â”‚   â””â”€â”€ visualize.py
-â”œâ”€â”€ data/             # downloaded automatically by torchvision
-â”œâ”€â”€ checkpoints/      # trained model weights
-â””â”€â”€ outputs/          # comparison image
+|-- .github/
+|   |-- workflows/
+|       |-- ci.yml
+|-- docs/
+|   |-- architecture.svg
+|-- outputs/
+|   |-- dataset_pair_preview.png
+|   |-- psnr_comparison.png
+|   |-- tintoryx_restoration_strip.png
+|   |-- tintoryx_trained_predictions.png
+|-- src/
+|   |-- __init__.py
+|   |-- data.py
+|   |-- prepare_data.py
+|   |-- models.py
+|   |-- train.py
+|   |-- evaluate.py
+|   |-- metrics.py
+|   |-- visualize.py
+|   |-- infer.py
+|-- tests/
+|   |-- test_models.py
+|-- config.py
+|-- requirements.txt
+|-- PROJECT_DETAILS.md
+|-- README.md
+|-- LICENSE
+|-- .gitignore
 ```
 
-## 5. Setup (Windows PowerShell)
+The CIFAR-10 data directory and trained model checkpoints are created locally and excluded from Git because they are generated/downloadable artifacts.
+
+## Getting started
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/naitik2043/Tintoryx.git
+cd Tintoryx
+```
+
+### 2. Create and activate a virtual environment
+
+**Windows PowerShell**
+
 ```powershell
 python -m venv .venv
-.venv\Scripts\activate
+.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
+```
+
+**macOS / Linux**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+```
+
+### 3. Install dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-## 6. Run
-Run these commands from the project root:
-```powershell
-# Train both models for 12 epochs each
-python -m src.train --model both
+For GPU training, install a PyTorch and Torchvision build compatible with your CUDA driver and platform. The CPU-only workflow used by GitHub Actions is intended for automated tests, not model training.
 
-# Evaluate both models on the same 1,000-image test subset
-python -m src.evaluate
+### 4. Prepare the dataset
 
-# Generate the four-column visual comparison
-python -m src.visualize
+```bash
+python -m src.prepare_data
 ```
-The first run downloads CIFAR-10 automatically. The evaluation script also saves `outputs/psnr_comparison.png`. Training time depends on hardware. A CUDA-enabled GPU is recommended; CPU training may take substantially longer.
 
-## 7. Evaluation
-**PSNR (Peak Signal-to-Noise Ratio)** measures pixel-level reconstruction quality. With images scaled to [0,1]:
-`MSE = mean((prediction - target)^2)`
-`PSNR = 10 Ã— log10(1 / MSE)`
-Higher PSNR indicates lower pixel-wise error. PSNR does not fully measure whether colors look perceptually realistic, so include the four-column visual comparison in the viva.
+This downloads/checks CIFAR-10, prints the paired tensor shapes, and saves `outputs/dataset_pair_preview.png`.
 
-## 8. Important experimental notes
-- Both models use the same train/test subsets, preprocessing, generator architecture, and epoch count for a fair comparison.
-- The grayscale input is created deterministically from each original RGB image; each input remains paired with its own RGB target.
-- The brief specifies a 12-epoch run. Results can vary with random seed, hardware, and library version. Report the values produced by your actual run; do not invent scores.
-- CIFAR-10 contains small object images, not historical photographs. The project title in the brief says â€œHistorical Photo Restoration,â€ but this implementation demonstrates paired colorization on CIFAR-10 at 32Ã—32 resolution. It should not be presented as a high-resolution archival-photo restoration system.
+### 5. Train the models
 
-## 9. Viva talking points
-1. Why paired data? Each grayscale input has its exact RGB target, enabling supervised reconstruction.
-2. Why U-Net? Encoder-decoder structure learns features while skip connections preserve spatial details.
-3. Why a discriminator? It pushes the generator toward realistic-looking local color and texture patterns.
-4. Why L1? It penalizes absolute pixel differences and anchors generated colors to the paired target.
-5. Why combine adversarial and L1 losses? Adversarial loss encourages realism; L1 encourages fidelity.
-6. Why PSNR plus images? PSNR gives a numeric pixel-error measure; visual inspection reveals color quality and artifacts.
+Train both models sequentially:
 
-## 10. Limitations and future work
-- CIFAR-10 resolution is only 32Ã—32.
-- The grayscale-to-color mapping is ambiguous; plausible colors may differ from the dataset's original colors.
-- A small subset and 12 epochs are suitable for a compact academic experiment, not production-quality restoration.
-- Future extensions: larger paired datasets, higher-resolution U-Net, perceptual loss, stronger discriminator, and user-uploaded image inference.
+```bash
+python -m src.train --model both
+```
 
-## Trained Model Predictions
+Or train them separately:
 
-![Tintoryx Trained Predictions](outputs/tintoryx_trained_predictions.png)
+```bash
+python -m src.train --model baseline
+python -m src.train --model cgan
+```
+
+Checkpoints are written to the local `checkpoints/` directory.
+
+### 6. Evaluate and visualize
+
+```bash
+python -m src.evaluate
+python -m src.visualize
+python -m src.infer
+```
+
+Evaluation writes `outputs/psnr_comparison.png`. The visualization and inference scripts save their PNGs under `outputs/` without requiring an interactive plot window.
+
+## Run the tests
+
+The unit tests do not download CIFAR-10 or require a GPU:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+GitHub Actions runs syntax checks and these CPU model/metric tests on pushes and pull requests to `main`.
+
+## Evaluation metric
+
+Peak Signal-to-Noise Ratio (PSNR) is calculated per image from the mean squared error (MSE), assuming image values are in [0, 1]:
+
+```text
+MSE  = mean((prediction - target) ** 2)
+PSNR = 10 * log10(1 / MSE)
+```
+
+The reported test score is the average of per-image PSNR values across the 1,000-image test subset. Higher PSNR means lower pixel-wise reconstruction error. It does not guarantee that the predicted colors look more realistic to a person.
+
+## Limitations
+
+- CIFAR-10 images are only 32 x 32 pixels and contain small object categories.
+- Grayscale-to-color prediction is ambiguous: one grayscale input can have multiple plausible colorizations.
+- The experiment uses a 10,000-image training subset and 12 epochs; it is an academic prototype, not a production restoration system.
+- PSNR is a pixel-wise metric and should be interpreted alongside visual results.
+- The current inference script demonstrates prediction on the CIFAR-10 test subset; arbitrary uploaded-photo inference is not implemented.
+
+## Future work
+
+- Train on larger paired datasets and higher-resolution images.
+- Explore perceptual losses and additional image-quality metrics.
+- Improve color consistency and reduce adversarial artifacts.
+- Add a user-facing interface for uploading grayscale images.
+- Record per-epoch training histories for learning-curve analysis.
+
+## Author
+
+**Naitik Gupta**  
+Computer Science and Engineering Undergraduate
+
+- GitHub: [@naitik2043](https://github.com/naitik2043)
+- Repository: [Tintoryx](https://github.com/naitik2043/Tintoryx)
+
+## License
+
+This project is released under the MIT License. See [LICENSE](LICENSE).
