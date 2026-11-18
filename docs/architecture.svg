@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">Tintoryx model architecture and experiment flow</title>
+  <desc id="desc">CIFAR-10 RGB images are converted into paired grayscale inputs and RGB targets. A U-Net baseline is trained with L1 loss. A conditional GAN uses a U-Net generator, a PatchGAN discriminator, adversarial loss, and weighted L1 loss. Both generators are evaluated with PSNR and visual comparisons.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#64748b"/>
+    </marker>
+    <style>
+      .bg { fill: #f8fafc; }
+      .title { font: 700 30px Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 16px Arial, sans-serif; fill: #475569; }
+      .heading { font: 700 20px Arial, sans-serif; fill: #0f172a; }
+      .label { font: 16px Arial, sans-serif; fill: #0f172a; }
+      .small { font: 14px Arial, sans-serif; fill: #475569; }
+      .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 2; rx: 14; }
+      .data { fill: #e0f2fe; stroke: #0284c7; stroke-width: 2; rx: 14; }
+      .model { fill: #ede9fe; stroke: #7c3aed; stroke-width: 2; rx: 14; }
+      .loss { fill: #fef3c7; stroke: #d97706; stroke-width: 2; rx: 14; }
+      .eval { fill: #dcfce7; stroke: #16a34a; stroke-width: 2; rx: 14; }
+      .arrow { fill: none; stroke: #64748b; stroke-width: 3; marker-end: url(#arrow); }
+      .dash { stroke-dasharray: 8 7; }
+    </style>
+  </defs>
+  <rect class="bg" width="1440" height="900"/>
+  <text class="title" x="720" y="55" text-anchor="middle">Tintoryx | Paired CIFAR-10 Image Colorization</text>
+  <text class="subtitle" x="720" y="84" text-anchor="middle">Shared grayscale input and RGB target - two training strategies - quantitative and visual evaluation</text>
+
+  <rect class="data" x="60" y="145" width="250" height="110"/>
+  <text class="heading" x="185" y="185" text-anchor="middle">CIFAR-10</text>
+  <text class="label" x="185" y="214" text-anchor="middle">RGB image</text>
+  <text class="small" x="185" y="237" text-anchor="middle">3 x 32 x 32</text>
+
+  <path class="arrow" d="M310 200 H390"/>
+  <rect class="data" x="400" y="145" width="270" height="110"/>
+  <text class="heading" x="535" y="185" text-anchor="middle">Paired preprocessing</text>
+  <text class="label" x="535" y="214" text-anchor="middle">RGB to grayscale</text>
+  <text class="small" x="535" y="237" text-anchor="middle">preserve original RGB target</text>
+
+  <path class="arrow" d="M670 200 H750 V165 H800"/>
+  <path class="arrow" d="M750 200 V265 H800"/>
+  <rect class="data" x="810" y="120" width="250" height="90"/>
+  <text class="heading" x="935" y="157" text-anchor="middle">Grayscale input</text>
+  <text class="label" x="935" y="185" text-anchor="middle">1 x 32 x 32</text>
+  <rect class="data" x="810" y="230" width="250" height="90"/>
+  <text class="heading" x="935" y="267" text-anchor="middle">Ground-truth RGB</text>
+  <text class="label" x="935" y="295" text-anchor="middle">3 x 32 x 32</text>
+
+  <path class="arrow" d="M1060 165 H1125 V375 H1060"/>
+  <path class="arrow" d="M1060 275 H1100 V375"/>
+  <text class="small" x="1145" y="300">paired examples</text>
+
+  <rect class="card" x="60" y="370" width="620" height="320"/>
+  <text class="heading" x="370" y="410" text-anchor="middle">A. L1-only U-Net baseline</text>
+  <rect class="model" x="105" y="450" width="230" height="100"/>
+  <text class="heading" x="220" y="490" text-anchor="middle">U-Net generator</text>
+  <text class="small" x="220" y="520" text-anchor="middle">grayscale to RGB</text>
+  <path class="arrow" d="M335 500 H405"/>
+  <rect class="data" x="415" y="450" width="220" height="100"/>
+  <text class="heading" x="525" y="490" text-anchor="middle">Predicted RGB</text>
+  <text class="small" x="525" y="520" text-anchor="middle">3 x 32 x 32</text>
+  <path class="arrow" d="M525 550 V590"/>
+  <rect class="loss" x="345" y="600" width="290" height="65"/>
+  <text class="heading" x="490" y="628" text-anchor="middle">L1 reconstruction loss</text>
+  <text class="small" x="490" y="650" text-anchor="middle">prediction vs. target</text>
+
+  <rect class="card" x="760" y="370" width="620" height="320"/>
+  <text class="heading" x="1070" y="410" text-anchor="middle">B. Conditional GAN</text>
+  <rect class="model" x="805" y="445" width="225" height="90"/>
+  <text class="heading" x="917" y="480" text-anchor="middle">U-Net generator</text>
+  <text class="small" x="917" y="507" text-anchor="middle">predict RGB</text>
+  <path class="arrow" d="M1030 490 H1090"/>
+  <rect class="data" x="1100" y="445" width="225" height="90"/>
+  <text class="heading" x="1212" y="480" text-anchor="middle">Generated RGB</text>
+  <text class="small" x="1212" y="507" text-anchor="middle">candidate image</text>
+  <path class="arrow" d="M1212 535 V570"/>
+  <rect class="model" x="1080" y="580" width="270" height="85"/>
+  <text class="heading" x="1215" y="615" text-anchor="middle">Conditional PatchGAN</text>
+  <text class="small" x="1215" y="642" text-anchor="middle">grayscale + candidate RGB</text>
+  <rect class="loss" x="800" y="580" width="245" height="85"/>
+  <text class="heading" x="922" y="615" text-anchor="middle">Generator objective</text>
+  <text class="small" x="922" y="642" text-anchor="middle">adversarial + 10 x L1</text>
+  <path class="arrow" d="M1045 622 H1070"/>
+
+  <path class="arrow" d="M370 690 V750 H530"/>
+  <path class="arrow" d="M1070 690 V750 H910"/>
+  <rect class="eval" x="530" y="735" width="380" height="105"/>
+  <text class="heading" x="720" y="775" text-anchor="middle">Evaluation on 1,000 test images</text>
+  <text class="label" x="720" y="805" text-anchor="middle">Average per-image PSNR + visual comparison</text>
+  <text class="small" x="720" y="827" text-anchor="middle">L1 U-Net: 24.201 dB | CGAN: 22.606 dB</text>
+</svg>
