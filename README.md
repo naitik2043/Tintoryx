@@ -1,346 +1,126 @@
 # Tintoryx
-### Deep Learning–Based Grayscale-to-Color Image Translation with U-Net and Conditional GANs
 
-<p align="center">
-  <strong>A reproducible computer-vision experiment comparing pixel-reconstruction and adversarial learning for paired image colorization.</strong>
-</p>
+### AI-Powered Grayscale Image Colorization with DDColor, U-Net & Conditional GANs
 
-<p align="center">
-  <a href="https://github.com/naitik2043/Tintoryx/actions/workflows/ci.yml"><img src="https://github.com/naitik2043/Tintoryx/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
-  <img src="https://img.shields.io/badge/PyTorch-2.x-EE4C2C?logo=pytorch&logoColor=white" alt="PyTorch">
-  <img src="https://img.shields.io/badge/Interface-Streamlit-FF4B4B?logo=streamlit&logoColor=white" alt="Streamlit">
-  <img src="https://img.shields.io/badge/License-MIT-2ea44f" alt="MIT License">
-</p>
+[![CI](https://github.com/naitik2043/Tintoryx/actions/workflows/ci.yml/badge.svg)](https://github.com/naitik2043/Tintoryx/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.12-blue)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C)
+![ONNX Runtime](https://img.shields.io/badge/ONNX%20Runtime-CPU-blueviolet)
+![Streamlit](https://img.shields.io/badge/Interface-Streamlit-FF4B4B)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-**Tintoryx** is an academic deep-learning project that learns to predict RGB images from paired grayscale inputs. It implements and compares two approaches:
+**Tintoryx** is an image-colorization project that turns grayscale photographs into RGB color predictions. It combines a pretrained DDColor-tiny inference backend for practical photograph colorization with an academic CIFAR-10 experiment comparing a U-Net baseline against a Conditional Generative Adversarial Network (cGAN).
 
-- **U-Net baseline:** trained with pixel-wise L1 reconstruction loss.
-- **Conditional Generative Adversarial Network (cGAN):** a U-Net generator trained with adversarial and L1 losses, alongside a conditional PatchGAN discriminator.
+The project includes a Streamlit interface, command-line inference, model integrity verification, Lab color-space processing, original-resolution luminance preservation, PSNR/SSIM evaluation, training analytics, automated tests, and GitHub Actions CI.
 
-The project includes deterministic CIFAR-10 subset preparation, model training, checkpoint saving, evaluation with PSNR and SSIM, visual comparisons, command-line inference, a Streamlit demo, unit tests, and a GitHub Actions CI workflow.
-
-> [!IMPORTANT]
-> **Research scope:** The current implementation uses CIFAR-10 images at **32 × 32** resolution. Although the original assignment context refers to historical-photo restoration, this repository demonstrates small-image colorization. It is **not** a validated high-resolution historical-photo restoration or archival-restoration system.
+> **Two clearly separated tracks:** DDColor is the recommended pretrained model for photograph colorization. The original Tintoryx U-Net/cGAN models remain as the academic experiment. The CIFAR-10 models were trained on 32 × 32 images and should not be used as the photo-colorization engine.
 
 ---
 
-## Contents
+## What changed and why?
 
-- [Experiment at a glance](#experiment-at-a-glance)
-- [Visual results](#visual-results)
-- [How Tintoryx works](#how-tintoryx-works)
-- [Model architectures](#model-architectures)
-- [Dataset and preprocessing](#dataset-and-preprocessing)
-- [Training configuration](#training-configuration)
-- [Evaluation methodology](#evaluation-methodology)
-- [Repository structure](#repository-structure)
-- [Getting started](#getting-started)
-- [Run the application](#run-the-application)
-- [Run tests](#run-tests)
-- [Limitations](#limitations)
-- [Potential improvements](#potential-improvements)
-- [Documentation](#documentation)
-- [Author](#author)
-- [License](#license)
+The first upload implementation sent every photograph through a U-Net trained on 32 × 32 CIFAR-10 samples. It then enlarged the 32 × 32 output to the uploaded image dimensions. This inevitably removed almost all image detail and produced the blurry result seen in the first demo.
 
----
+The recommended path now uses a pretrained DDColor-tiny ONNX model that predicts Lab color channels at 512 × 512. Tintoryx keeps the original-resolution luminance and resizes only the predicted chroma channels back to the source dimensions.
 
-## Experiment at a glance
+| Area | Earlier photo path | Recommended photo path |
+|---|---|---|
+| Model | CIFAR-10 U-Net/cGAN | Pretrained DDColor-tiny |
+| Training data behind model | 10,000 CIFAR-10 images | Upstream DDColor pretrained weights |
+| Model input | 32 × 32 | 512 × 512 |
+| Color representation | Direct RGB prediction | CIE Lab chroma (a/b) |
+| Source luminance | Re-generated by model | Preserved at original resolution |
+| Execution | PyTorch checkpoint | Quantized ONNX + ONNX Runtime |
+| Intended use | Course experiment | General photograph colorization preview |
 
-| Component | Implementation |
-|---|---|
-| Task | Paired grayscale-to-RGB image colorization |
-| Dataset | CIFAR-10 |
-| Training subset | 10,000 images |
-| Test subset | 1,000 images |
-| Input | 1-channel grayscale image, 32 × 32 |
-| Target | 3-channel RGB image, 32 × 32 |
-| Baseline | U-Net with L1 loss |
-| Adversarial model | U-Net generator + conditional PatchGAN discriminator |
-| Generator objective | Adversarial loss + weighted L1 loss |
-| Evaluation | PSNR and SSIM |
-| Demo | Streamlit |
-| Framework | PyTorch |
-
-### Previously recorded PSNR results
-
-The repository documents the following experiment, in which both models were trained for 12 epochs and evaluated on the same 1,000-image test subset.
-
-| Model | Average test PSNR |
-|---|---:|
-| L1-only U-Net baseline | **24.201 dB** |
-| Conditional GAN | 22.606 dB |
-| cGAN − baseline | **−1.595 dB** |
-
-**Interpretation:** The L1-only baseline achieved higher PSNR on this test subset, meaning its predictions had lower pixel-wise reconstruction error. The cGAN generated more vivid colors in some examples, but adversarial training did not improve the recorded PSNR in this run. This is a useful experimental result: a more complex model does not automatically perform better on every metric.
-
-The evaluation code also computes SSIM. Run the evaluation command with locally trained checkpoints to generate the current SSIM measurements. No unverified SSIM value is reported here.
+**Important:** output dimensions match the source image, but the chroma is predicted at 512 × 512 and resized. This is not native-resolution chroma generation, scratch removal, deblurring, or a guarantee of historical color accuracy.
 
 ---
 
-## Visual results
+## Recommended photo-colorization engine
 
-### 1. Paired dataset examples
+Tintoryx uses **DDColor-tiny**, based on the ICCV 2023 DDColor method.
 
-Each grayscale input is generated from its corresponding RGB image, providing a paired target for supervised learning.
+- Original implementation: [piddnad/DDColor](https://github.com/piddnad/DDColor)
+- Quantized ONNX model: [toolsmonk/ddcolor-tiny](https://huggingface.co/toolsmonk/ddcolor-tiny)
+- Model input: `float32 [1, 3, 512, 512]`
+- Model output: `float32 [1, 2, 512, 512]` (predicted Lab a/b channels)
+- ONNX artifact size: approximately 107.5 MiB
+- Runtime: ONNX Runtime CPU execution provider
+- Download: automatic on first use, cached outside the repository
+- Integrity: SHA-256 verification against the published model artifact hash
 
-![Grayscale and RGB dataset pairs](outputs/dataset_pair_preview.png)
-
-### 2. Model comparison
-
-The comparison shows the grayscale input, L1 baseline output, cGAN output, and original RGB target.
-
-![Tintoryx model comparison](outputs/tintoryx_restoration_strip.png)
-
-### 3. Conditional GAN predictions
-
-![Conditional GAN predictions](outputs/tintoryx_trained_predictions.png)
-
-### 4. Recorded PSNR comparison
-
-![PSNR comparison](outputs/psnr_comparison.png)
-
----
-
-## How Tintoryx works
-
-The end-to-end workflow is:
+### Colorization pipeline
 
 ```text
-           CIFAR-10 RGB images
-                    |
-                    v
-        Convert RGB images to grayscale
-                    |
-            Paired training data
-                    |
-             +------+------+
-             |             |
-             v             v
-        Grayscale input  RGB target
-             |             |
-       +-----+------+      |
-       |            |      |
-       v            v      |
-    U-Net        cGAN      |
-   baseline    generator   |
-       |            |      |
-       |       PatchGAN    |
-       |      discriminator
-       |            |
-       +------+-----+
-              |
-              v
-       Predicted RGB images
-              |
-              v
-      PSNR and SSIM evaluation
-              |
-              v
-      Metrics, plots and samples
+       Uploaded photograph
+                |
+                v
+      EXIF orientation + RGB
+                |
+                v
+        Convert RGB to Lab
+                |
+          +-----+------+
+          |            |
+          v            v
+   Original L       Set a=b=0
+   full resolution      |
+          |             v
+          |       Grayscale RGB
+          |        512 x 512
+          |             |
+          |             v
+          |       DDColor-tiny
+          |             |
+          |             v
+          |       Predicted a/b
+          |        512 x 512
+          |             |
+          |             v
+          |       Resize a/b to
+          |       source dimensions
+          |             |
+          +------+------+
+                 |
+                 v
+         Combine L + predicted a/b
+                 |
+                 v
+           Convert Lab to RGB
+                 |
+                 v
+       Downloadable colorized PNG
 ```
 
-1. Load CIFAR-10 RGB images.
-2. Convert each RGB image into a matching grayscale input.
-3. Train a U-Net baseline using L1 loss.
-4. Train a conditional GAN using a U-Net generator and PatchGAN discriminator.
-5. Evaluate both generators on the same held-out test subset.
-6. Compare outputs using PSNR, SSIM, and visual inspection.
-7. Save checkpoints and experiment artifacts locally.
+### Why Lab color space?
+
+CIE Lab separates lightness from color information:
+
+- **L:** image lightness/brightness.
+- **a:** green-to-red color information.
+- **b:** blue-to-yellow color information.
+
+The DDColor model predicts the a and b channels. Tintoryx retains the original L channel so that the source photograph's brightness and fine luminance detail are not replaced by a low-resolution RGB prediction.
+
+### Model download and licensing
+
+The model is not committed to Git. Tintoryx downloads the pinned ONNX artifact from Hugging Face on first use and verifies its SHA-256 before creating the inference session.
+
+See [Third-Party Model Notices](docs/THIRD_PARTY_NOTICES.md) for model provenance, checksum, attribution, citation, and licensing details.
 
 ---
 
-## Model architectures
+## Run the application
 
-### U-Net baseline
-
-The U-Net learns a mapping from a one-channel grayscale tensor to a three-channel RGB prediction.
-
-**Input:** `[batch, 1, 32, 32]`  
-**Output:** `[batch, 3, 32, 32]`
-
-Its main components are:
-
-- **Encoder:** progressively reduces spatial dimensions and learns image features.
-- **Bottleneck:** processes the compressed feature representation.
-- **Decoder:** upsamples features to reconstruct the RGB image.
-- **Skip connections:** pass spatial information from encoder layers to decoder layers.
-- **Sigmoid output:** keeps predicted pixel values within `[0, 1]`.
-
-The baseline objective is:
-
-```text
-L_baseline = L1(predicted RGB, ground-truth RGB)
-```
-
-### Conditional Generative Adversarial Network
-
-The cGAN consists of two networks:
-
-**Generator**
-- Uses the U-Net architecture.
-- Receives a grayscale image.
-- Produces a three-channel RGB prediction.
-
-**Conditional PatchGAN discriminator**
-- Receives the grayscale image together with a real or generated RGB image.
-- Learns to distinguish real grayscale/RGB pairs from generated pairs.
-- Produces local patch-level real/fake logits.
-
-The generator objective is:
-
-```text
-L_generator = L_adversarial + lambda_L1 × L1(prediction, target)
-```
-
-The discriminator uses binary cross-entropy with logits. The L1 term encourages fidelity to the paired target, while the adversarial term encourages locally realistic image patterns.
-
-### Why compare these models?
-
-The U-Net baseline provides a reconstruction-focused reference. The cGAN introduces an adversarial objective that may improve visual realism, but it can also trade exact pixel matching for plausible local patterns. Comparing both models helps show how training objectives affect image-colorization results.
-
----
-
-## Dataset and preprocessing
-
-Tintoryx uses the CIFAR-10 dataset through `torchvision.datasets.CIFAR10`.
-
-| Setting | Value |
-|---|---:|
-| Training subset | 10,000 images |
-| Test subset | 1,000 images |
-| Image resolution | 32 × 32 |
-| Input channels | 1 (grayscale) |
-| Target channels | 3 (RGB) |
-| Subset seed | 42 |
-
-The grayscale input is computed from its corresponding RGB image. This preserves the input-target relationship required for paired supervised learning.
-
-The selected subsets are shuffled deterministically using the configured seed. CIFAR-10 is downloaded locally on first run and is not committed to the repository.
-
----
-
-## Training configuration
-
-The default settings are defined in `config.py`.
-
-| Hyperparameter | Value |
-|---|---:|
-| Epochs per model | 12 |
-| Batch size | 16 |
-| Optimizer | Adam |
-| Learning rate | 0.0002 |
-| Adam beta 1 | 0.5 |
-| cGAN L1 weight | 10 |
-| Random seed | 42 |
-| Image resolution | 32 × 32 |
-| DataLoader workers | 0 |
-| Compute device | CUDA when available; otherwise CPU |
-
-The training code records epoch-level losses and saves model checkpoints. Python, NumPy, PyTorch, CUDA, and DataLoader shuffling are seeded for more consistent reruns. Exact reproducibility can still vary with hardware, CUDA versions, and backend operations.
-
----
-
-## Evaluation methodology
-
-Tintoryx calculates two complementary image-quality metrics.
-
-### Peak Signal-to-Noise Ratio (PSNR)
-
-PSNR measures pixel-level reconstruction error using mean squared error (MSE).
-
-```text
-MSE  = mean((prediction - target)²)
-PSNR = 10 × log10(1 / MSE)
-```
-
-- Higher PSNR indicates lower pixel-wise error.
-- The implementation calculates PSNR per image and averages the scores.
-- Image values are expected to be in the range `[0, 1]`.
-
-### Structural Similarity Index (SSIM)
-
-SSIM compares local luminance, contrast, and structural information between two images.
-
-- Higher SSIM generally indicates stronger structural similarity.
-- Tintoryx uses a Gaussian window and a data range of 1.0.
-- SSIM complements PSNR, but neither metric alone fully captures perceived color quality.
-
-### Generate evaluation artifacts
-
-After training both models, execute:
-
-```bash
-python -m src.evaluate
-```
-
-This generates:
-
-| Output | Description |
-|---|---|
-| `outputs/evaluation_results.json` | PSNR, SSIM, sample counts, and metric differences |
-| `outputs/metrics_comparison.png` | PSNR and SSIM comparison charts |
-
----
-
-## Repository structure
-
-```text
-Tintoryx/
-├── .github/
-│   └── workflows/
-│       └── ci.yml                  # GitHub Actions: syntax checks and tests
-├── docs/
-│   └── architecture.svg            # Architecture illustration
-├── outputs/
-│   ├── dataset_pair_preview.png    # Paired grayscale/RGB samples
-│   ├── psnr_comparison.png         # Recorded PSNR chart
-│   ├── tintoryx_restoration_strip.png
-│   └── tintoryx_trained_predictions.png
-├── src/
-│   ├── __init__.py
-│   ├── data.py                     # CIFAR-10 and paired preprocessing
-│   ├── prepare_data.py             # Dataset preview generation
-│   ├── models.py                   # U-Net and PatchGAN architectures
-│   ├── train.py                    # Baseline and cGAN training
-│   ├── training_artifacts.py       # Training history and loss plots
-│   ├── metrics.py                  # PSNR and SSIM implementations
-│   ├── evaluate.py                 # Test-set evaluation and metric charts
-│   ├── visualize.py                # Side-by-side prediction visualization
-│   └── infer.py                    # Command-line image inference
-├── tests/
-│   └── test_models.py              # Architecture and metric tests
-├── app.py                          # Streamlit user interface
-├── config.py                       # Experiment configuration
-├── requirements.txt                # Python dependencies
-├── PROJECT_DETAILS.md              # Detailed project and viva notes
-├── README.md
-├── LICENSE
-└── .gitignore
-```
-
-**Generated locally:** The CIFAR-10 download, trained checkpoints, and generated training/evaluation artifacts are excluded from version control. Run the relevant commands to recreate them.
-
----
-
-## Getting started
-
-### Prerequisites
-
-- Python 3.10 or newer (the CI workflow uses Python 3.12).
-- pip.
-- Internet access for the initial CIFAR-10 download.
-- A CUDA-compatible PyTorch environment is recommended for faster training, but CPU execution is supported.
-
-### 1. Clone the repository
+### 1. Clone
 
 ```bash
 git clone https://github.com/naitik2043/Tintoryx.git
 cd Tintoryx
 ```
 
-### 2. Create and activate a virtual environment
+### 2. Create a virtual environment
 
 **Windows PowerShell**
 
@@ -364,17 +144,83 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-For GPU training, install a PyTorch and Torchvision build compatible with your system and CUDA driver. The GitHub Actions workflow runs CPU tests; it does not train the models.
+### 4. Launch Streamlit
 
-### 4. Prepare the dataset
+```bash
+streamlit run app.py
+```
+
+Choose **DDColor — pretrained photo colorizer (recommended)**, upload a photograph, preview the result, and download the colorized PNG.
+
+The first run needs an internet connection to download the ~107.5 MiB ONNX model. Subsequent runs use the local Hugging Face cache.
+
+### Command-line inference
+
+```bash
+python -m src.infer --input photo.jpg --output outputs/photo_colorized.png
+```
+
+To use a manually downloaded model file:
+
+```bash
+python -m src.infer --input photo.jpg --output outputs/photo_colorized.png --model-path models/ddcolor_tiny_512_int8.onnx
+```
+
+Set a persistent/local model override using the environment variable:
+
+```powershell
+$env:TINTORYX_DDCOLOR_MODEL="models/ddcolor_tiny_512_int8.onnx"
+python -m src.infer --input photo.jpg
+```
+
+---
+
+## Academic experiment: U-Net vs Conditional GAN
+
+The original academic experiment is retained as a separate track so the assignment results and model comparison remain reproducible.
+
+It uses paired CIFAR-10 images at 32 × 32 resolution:
+
+| Setting | Value |
+|---|---:|
+| Training subset | 10,000 images |
+| Test subset | 1,000 images |
+| Epochs per model | 12 |
+| Batch size | 16 |
+| Optimizer | Adam |
+| Learning rate | 0.0002 |
+| cGAN L1 weight | 10 |
+| Random seed | 42 |
+
+### Models
+
+**U-Net baseline:** maps a 1-channel grayscale image to a 3-channel RGB image using encoder, bottleneck, decoder, and skip connections. It is trained with L1 reconstruction loss.
+
+**Conditional GAN:** uses the U-Net as the generator and a conditional PatchGAN discriminator. The generator objective combines adversarial loss with weighted L1 loss:
+
+```text
+L_G = L_adversarial + 10 x L1(prediction, target)
+```
+
+### Previously recorded PSNR results
+
+| Model | Average test PSNR |
+|---|---:|
+| L1-only U-Net | **24.201 dB** |
+| Conditional GAN | 22.606 dB |
+| CGAN minus baseline | **-1.595 dB** |
+
+The L1-only baseline had lower pixel-wise reconstruction error on the reported test subset. The cGAN produced more vivid colors in some examples, but adversarial training did not improve PSNR in this experiment.
+
+These are the existing recorded results from the original CIFAR-10 experiment. They are not DDColor benchmark scores. The pretrained DDColor model's output should be evaluated independently on a suitable dataset before reporting performance numbers.
+
+### Academic experiment commands
+
+Prepare the CIFAR-10 dataset:
 
 ```bash
 python -m src.prepare_data
 ```
-
-This downloads or checks CIFAR-10, prints the paired tensor dimensions, and saves a dataset preview to `outputs/dataset_pair_preview.png`.
-
-### 5. Train the models
 
 Train both models:
 
@@ -382,113 +228,122 @@ Train both models:
 python -m src.train --model both
 ```
 
-Or train them individually:
+Train separately:
 
 ```bash
 python -m src.train --model baseline
 python -m src.train --model cgan
 ```
 
-Checkpoints are saved under `checkpoints/`. Training history and its plot are saved under `outputs/`.
+Evaluate and visualize:
 
-### 6. Evaluate the trained models
+```bash
+python -m src.evaluate
+python -m src.visualize
+```
+
+Choose the academic engine in the Streamlit selector or run:
+
+```bash
+python -m src.infer --input photo.jpg --model cgan
+```
+
+It requires the locally trained `checkpoints/tintoryx_cgan_generator.pt` file and is expected to look blurry on real-world photographs.
+
+---
+
+## Evaluation and training analytics
+
+The academic experiment provides two complementary image metrics:
+
+- **PSNR:** measures pixel-level reconstruction error; higher is better.
+- **SSIM:** compares local luminance, contrast, and structure; higher generally indicates greater structural similarity.
+
+Run:
 
 ```bash
 python -m src.evaluate
 ```
 
-Both model checkpoints must exist before evaluation.
+Generated local artifacts include:
 
-### 7. Generate visual comparisons
+- `outputs/evaluation_results.json`
+- `outputs/metrics_comparison.png`
+- `outputs/training_history.json`
+- `outputs/training_history.png`
 
-```bash
-python -m src.visualize
-```
-
-The script saves a comparison of grayscale inputs, baseline predictions, cGAN predictions, and ground-truth RGB images.
-
----
-
-## Run the application
-
-First train the cGAN so that its generator checkpoint is available:
-
-```bash
-python -m src.train --model cgan
-```
-
-### Streamlit interface
-
-```bash
-streamlit run app.py
-```
-
-The interface allows users to upload an image, preview the grayscale input and generated RGB output, and download the result.
-
-### Command-line inference
-
-```bash
-python -m src.infer --input path/to/grayscale_image.jpg --output outputs/colorized_image.png
-```
-
-An optional checkpoint path can also be supplied:
-
-```bash
-python -m src.infer --input input.jpg --output output.png --checkpoint checkpoints/tintoryx_cgan_generator.pt
-```
-
-> [!NOTE]
-> The trained model operates at **32 × 32** resolution. For arbitrary-image inference, the input is resized to 32 × 32 and the prediction is resized back to the original dimensions for display. This resizing does not reconstruct missing high-resolution details.
+These files are generated from locally trained checkpoints; the updated SSIM values are not pre-filled or invented.
 
 ---
 
-## Run tests
+## Project structure
 
-Run the unit tests from the repository root:
+```text
+Tintoryx/
+|-- .github/workflows/ci.yml
+|-- docs/
+|   |-- architecture.svg
+|   |-- DDCOLOR_INFERENCE.md
+|   |-- THIRD_PARTY_NOTICES.md
+|-- outputs/                       # tracked sample results
+|-- src/
+|   |-- data.py                    # paired CIFAR-10 loading
+|   |-- ddcolor.py                 # pretrained DDColor ONNX backend
+|   |-- models.py                  # U-Net and PatchGAN
+|   |-- train.py                   # academic model training
+|   |-- training_artifacts.py      # loss history and plots
+|   |-- metrics.py                 # PSNR and SSIM
+|   |-- evaluate.py                # academic evaluation
+|   |-- prepare_data.py
+|   |-- visualize.py
+|   |-- infer.py                   # DDColor / cGAN CLI
+|-- tests/
+|   |-- test_ddcolor.py
+|   |-- test_models.py
+|-- app.py                         # Streamlit interface
+|-- config.py
+|-- requirements.txt
+|-- PROJECT_DETAILS.md
+|-- README.md
+|-- LICENSE
+|-- .gitignore
+```
+
+Large datasets, local checkpoints, ONNX weights, and generated experiment artifacts are excluded from Git. The pretrained ONNX model is downloaded and cached locally.
+
+---
+
+## Tests and CI
+
+Run the CPU unit tests:
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-The test suite covers:
+The suite covers model tensor shapes, PSNR/SSIM behavior, DDColor preprocessing and reconstruction, original-size output handling, malformed model outputs, and image-size safety checks.
 
-- U-Net input/output shapes and output range.
-- PatchGAN patch-level logits.
-- PSNR behavior for identical and distorted predictions.
-- SSIM behavior for identical and distorted predictions.
-- Metric input-shape validation.
-
-### Continuous integration
-
-The GitHub Actions workflow at `.github/workflows/ci.yml` runs on pushes and pull requests targeting `main`. It installs dependencies, compiles the Python modules, and runs the CPU unit tests.
+GitHub Actions runs dependency installation, Python compilation, and unit tests on pushes and pull requests to `main`. The CI suite uses a mocked ONNX session; the real 107.5 MiB model download and live inference are not part of the CI run.
 
 ---
 
 ## Limitations
 
-- CIFAR-10 images are only 32 × 32 pixels and contain a limited range of object categories.
-- Grayscale-to-color prediction is inherently ambiguous; multiple plausible RGB images can correspond to similar grayscale information.
-- The experiment uses a subset of CIFAR-10 and a limited training duration.
-- PSNR and SSIM measure different aspects of similarity, but neither fully represents human-perceived color realism.
-- Arbitrary-image inference downsamples images to 32 × 32 before prediction.
-- The project has not been validated for archival restoration, face restoration, or production deployment.
+- Automatic colorization predicts plausible colors; it cannot know the exact original colors of an unknown grayscale photograph.
+- DDColor chroma is predicted at 512 × 512, then resized to source dimensions. This preserves source luminance but does not create true native-resolution chroma detail.
+- DDColor is a colorization model, not a scratch-removal, deblurring, denoising, or face-restoration model.
+- The academic U-Net/cGAN remains limited to 32 × 32 CIFAR-10 images.
+- Model output quality varies with image content, contrast, age, and artifacts.
+- Large images need additional memory; the application enforces a 16-megapixel image limit and 20 MB upload limit.
+- The first inference needs internet access to download the pretrained ONNX artifact.
 
-## Potential improvements
+## Future work
 
-- Train on larger paired datasets and higher-resolution images.
-- Add perceptual, feature-based, and color-consistency losses.
-- Introduce validation-based checkpoint selection.
-- Compare multiple random seeds and report mean and standard deviation.
-- Evaluate additional perceptual metrics and conduct human-quality assessments.
-- Build a dedicated high-resolution architecture before targeting historical-photo restoration.
-
----
-
-## Documentation
-
-For the expanded implementation specification, experiment notes, metric explanations, and viva preparation, see **[PROJECT_DETAILS.md](PROJECT_DETAILS.md)**.
-
-The architecture illustration is available at **[docs/architecture.svg](docs/architecture.svg)**.
+- Evaluate DDColor against a curated grayscale/RGB benchmark and report PSNR, SSIM, LPIPS, and visual examples.
+- Add optional tiling or multi-scale inference for larger photographs.
+- Explore dedicated restoration models for scratch removal, denoising, deblurring, and face recovery.
+- Fine-tune a high-resolution colorizer on a licensed paired photographic dataset.
+- Add inference profiling and hardware-specific optimization.
 
 ## Author
 
@@ -496,8 +351,9 @@ The architecture illustration is available at **[docs/architecture.svg](docs/arc
 Computer Science and Engineering Undergraduate
 
 - GitHub: [@naitik2043](https://github.com/naitik2043)
-- Project repository: [Tintoryx](https://github.com/naitik2043/Tintoryx)
+- Repository: [Tintoryx](https://github.com/naitik2043/Tintoryx)
 
 ## License
 
-Distributed under the MIT License. See [LICENSE](LICENSE) for details.
+Tintoryx's project code is released under the MIT License. The external DDColor model has its own Apache-2.0 license and attribution requirements; see [docs/THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md).
+

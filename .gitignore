@@ -22,19 +22,25 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Downloaded dataset and generated model checkpoints
+# Downloaded datasets, pretrained models, and training checkpoints
 data/
+models/
 checkpoints/
+*.onnx
 *.pt
 *.pth
 *.ckpt
 
-# Generated experiment artifacts (re-created by training/evaluation)
+# Generated experiment artifacts
 outputs/training_history.json
 outputs/training_history.png
 outputs/evaluation_results.json
 outputs/metrics_comparison.png
 outputs/colorized_image.png
+
+# Local caches
+.cache/
+.huggingface/
 
 # Logs and temporary files
 *.log
