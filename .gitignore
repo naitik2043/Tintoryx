@@ -1,17 +1,19 @@
-﻿# Python virtual environments
+# Python virtual environments
 .venv/
 venv/
 env/
 
-# Python cache
+# Python cache and compiled files
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Training logs
-*.log
+# Secrets and environment variables
+.env
+.env.*
+!.env.example
 
-# IDE and editor files
+# Editor and IDE files
 .vscode/
 .idea/
 
@@ -20,16 +22,19 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Dataset - download locally when required
+# Downloaded dataset
 data/
 
-# Model checkpoints - keep locally, do not commit large binaries
+# Model checkpoints (large generated binaries)
 checkpoints/
 *.pt
 *.pth
 *.ckpt
 
-# Temporary files
+# Logs and temporary files
+*.log
 *.tmp
+
+# Operating system files
 .DS_Store
 Thumbs.db
